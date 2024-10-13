@@ -9,18 +9,19 @@ import random
 import logging
 from typing import List, Tuple, Dict
 
-# Set up logging
+# Set up logging for better debugging and progress tracking
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class NaiveBayesClassifier:
     def __init__(self):
-        self.vocab = set()
-        self.class_word_counts = defaultdict(lambda: defaultdict(int))
-        self.class_totals = defaultdict(int)
-        self.class_doc_counts = defaultdict(int)
-        self.total_docs = 0
-        self.stemmer = PorterStemmer()
-        self.stop_words = set(stopwords.words('english'))
+        # Initialize data structures for the classifier
+        self.vocab = set()  # Set of all unique words in the training data
+        self.class_word_counts = defaultdict(lambda: defaultdict(int))  # Count of each word in each class
+        self.class_totals = defaultdict(int)  # Total word count for each class
+        self.class_doc_counts = defaultdict(int)  # Number of documents in each class
+        self.total_docs = 0  # Total number of documents
+        self.stemmer = PorterStemmer()  # For word stemming
+        self.stop_words = set(stopwords.words('english'))  # Common words to ignore
 
     def preprocess(self, text: str) -> List[str]:
         """Tokenize, lowercase, remove stopwords, and stem the input text."""
@@ -32,6 +33,7 @@ class NaiveBayesClassifier:
         logging.info("Starting training process...")
         self.total_docs = len(documents)
         
+        # Process each document
         for filepath, category in documents:
             with open(filepath, 'r', encoding='utf-8', errors='ignore') as doc_file:
                 text = doc_file.read()
@@ -42,27 +44,31 @@ class NaiveBayesClassifier:
                 self.class_totals[category] += 1
             self.class_doc_counts[category] += 1
         
-        # Precompute log probabilities for efficiency
+        # Precompute log probabilities for efficiency during classification
         self.log_priors = {cat: math.log(count / self.total_docs) for cat, count in self.class_doc_counts.items()}
         self.log_likelihoods = defaultdict(lambda: defaultdict(float))
         for category, word_counts in self.class_word_counts.items():
             total_words = self.class_totals[category]
             vocab_size = len(self.vocab)
             for word, count in word_counts.items():
+                # Use Laplace smoothing (add-one) to handle unseen words
                 self.log_likelihoods[category][word] = math.log((count + 1) / (total_words + vocab_size))
         
         logging.info(f"Training complete. Vocabulary size: {len(self.vocab)}")
 
     def classify(self, text: str) -> str:
-        """Classify the given text."""
+        """Classify the given text using the trained model."""
         tokens = self.preprocess(text)
         scores = {category: self.log_priors[category] for category in self.class_doc_counts}
         
+        # Calculate the score for each category
         for category in scores:
             for token in tokens:
                 if token in self.vocab:
+                    # Use precomputed log likelihoods, or calculate for unseen words
                     scores[category] += self.log_likelihoods[category].get(token, math.log(1 / (self.class_totals[category] + len(self.vocab))))
         
+        # Return the category with the highest score
         return max(scores, key=scores.get)
 
 def load_corpus(filename: str, is_training: bool = True) -> List[Tuple[str, str]]:
@@ -95,9 +101,11 @@ def k_fold_cross_validation(documents: List[Tuple[str, str]], k: int = 5) -> flo
         test_start = i * fold_size
         test_end = (i + 1) * fold_size if i < k - 1 else len(documents)
         
+        # Split data into training and test sets
         test_set = documents[test_start:test_end]
         train_set = documents[:test_start] + documents[test_end:]
         
+        # Train and evaluate the classifier
         classifier = NaiveBayesClassifier()
         classifier.train(train_set)
         
